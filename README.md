@@ -4,11 +4,11 @@ Home Assistant in Docker on a Raspberry Pi 3, for local control of Xiaomi Wi-Fi 
 
 ## Deploy (Raspberry Pi)
 
-On the dev machine:
+On the dev machine (`pi` is the ssh alias → admin@192.168.1.41):
 
 ```bash
-export PI_HOST=pi@raspberrypi.local
-export PI_DIR=/home/pi/smart_home
+export PI_HOST=pi
+export PI_DIR=/home/admin/smart_home
 rsync -av --exclude='homeassistant/secrets.yaml' --exclude='homeassistant/.storage' \
   --exclude='homeassistant/home-assistant_v2.db' ./ "$PI_HOST:$PI_DIR/"
 ```
@@ -16,7 +16,7 @@ rsync -av --exclude='homeassistant/secrets.yaml' --exclude='homeassistant/.stora
 On the Pi:
 
 ```bash
-cd ~/smart_home
+cd /home/admin/smart_home
 docker compose up -d
 docker compose logs -f homeassistant
 ```

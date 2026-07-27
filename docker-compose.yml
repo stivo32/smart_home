@@ -1,7 +1,8 @@
 services:
   homeassistant:
     container_name: homeassistant
-    image: ghcr.io/home-assistant/home-assistant:stable
+    # docker.io mirror — ghcr.io stalled on pull from this network.
+    image: docker.io/homeassistant/home-assistant:stable
     restart: unless-stopped
     network_mode: host
     privileged: false
@@ -9,6 +10,6 @@ services:
       - ./homeassistant:/config
       - /etc/localtime:/etc/localtime:ro
     environment:
-      - TZ=Europe/Warsaw
-    # Pi 3 is memory-limited; cap so HA can't starve existing jobs.
-    mem_limit: 768m
+      - TZ=Europe/Vilnius
+    # Pi 4 (4GB): cap so HA can't starve the other jobs on this Pi.
+    mem_limit: 2g
