@@ -5,3 +5,5 @@ homeassistant/*.log
 homeassistant/.cloud/
 homeassistant/tts/
 homeassistant/deps/
+homeassistant/custom_components/
+homeassistant/www/community/
