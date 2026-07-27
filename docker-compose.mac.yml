@@ -1,0 +1,12 @@
+# Mac dry-run override. Docker Desktop on macOS does NOT support
+# network_mode: host, so we map the port instead. Device LAN discovery
+# (Xiaomi mDNS) will NOT work here — this override is only for validating
+# the container boot, config, and HACS install before deploying to the Pi.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
+services:
+  homeassistant:
+    network_mode: "bridge"
+    ports:
+      - "8123:8123"
