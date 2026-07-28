@@ -1,0 +1,53 @@
+title: Home
+views:
+  - title: Главная
+    path: main
+    icon: mdi:sofa
+    cards:
+      - type: vacuum
+        entity: vacuum.roborock_m1s_f706_robot_cleaner
+
+      - type: entities
+        title: Свет
+        show_header_toggle: true
+        entities:
+          - entity: light.yeelink_bslamp2_5e7b_light
+            name: Лампа
+          - entity: light.yeelink_ceila_9b89_light
+            name: Потолок (гостиная)
+            secondary_info: last-changed
+          - entity: light.yeelink_ceilb_5b2c_light
+            name: Потолок (Arwen)
+            secondary_info: last-changed
+          - entity: light.yeelink_ceilb_5b2c_ambient_light
+            name: Потолок (подсветка)
+
+      - type: entities
+        title: Выключатели
+        entities:
+          - entity: switch.lumi_b1lc04_2231_switch
+            name: Выключатель
+
+      - type: entities
+        title: Климат
+        entities:
+          - entity: sensor.miaomiaoce_t2_12f4_temperature
+            name: Температура
+          - entity: sensor.miaomiaoce_t2_12f4_relative_humidity
+            name: Влажность
+          - entity: sensor.miaomiaoce_t2_12f4_battery_level
+            name: Батарея датчика
+
+      - type: entities
+        title: Пылесос — детали
+        entities:
+          - entity: sensor.roborock_m1s_f706_status
+            name: Статус
+          - entity: sensor.roborock_m1s_f706_battery_level
+            name: Заряд
+          - entity: sensor.roborock_m1s_f706_props_clean_area
+            name: Площадь уборки
+          - entity: sensor.roborock_m1s_f706_props_clean_time
+            name: Время уборки
+          - entity: select.roborock_m1s_f706_mode
+            name: Режим

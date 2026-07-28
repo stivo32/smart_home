@@ -19,3 +19,14 @@ http:
 
 logger:
   default: warning
+
+# Curated dashboard in YAML (version-controlled). The default Overview stays
+# UI-managed; this adds a "Home" dashboard in the sidebar.
+lovelace:
+  dashboards:
+    home-yaml:
+      mode: yaml
+      title: Home
+      icon: mdi:home-assistant
+      show_in_sidebar: true
+      filename: dashboards/home.yaml
