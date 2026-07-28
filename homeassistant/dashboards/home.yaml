@@ -4,9 +4,6 @@ views:
     path: main
     icon: mdi:sofa
     cards:
-      - type: vacuum
-        entity: vacuum.roborock_m1s_f706_robot_cleaner
-
       - type: horizontal-stack
         cards:
           - type: button
