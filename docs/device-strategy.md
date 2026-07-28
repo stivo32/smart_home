@@ -12,7 +12,9 @@ on the Xiaomi cloud entirely.
 |---|---|---|---|
 | Aqara Wall Switch E1 (QBKG38LM) ×3 | CN (AliExpress) | Zigbee | Phase 2 → local Zigbee coordinator |
 | Mi Robot Vacuum 1S (`roborock.vacuum.m1s`) | CN | Wi-Fi | Local by token (start/stop/dock). Zones need cloud — dropped |
-| Yeelight ceiling lights + chandeliers | EU (bought in Lithuania) | Wi-Fi | Local by token; enable Yeelight "LAN Control" for pure-local |
+| Yeelight ceiling lights ×3 (Pro ×2, Arwen) | EU | Wi-Fi | ✅ Native `yeelight` integration, LAN Control, fully local |
+| Yeelight Mesh Downlight M2 ×6 (kitchen spots) | — | **BLE Mesh** | No LAN Control (mesh). On/off via the one Aqara E1 switch they share (Phase 2); dimming/color set-and-forget in app |
+| Yeelight bedside lamp (bslamp2) | — | Wi-Fi | Still on miot; can migrate to native `yeelight` + LAN Control later |
 | Xiaomi/BLE thermometer, gateway | CN | BLE/Zigbee via gateway | Superseded by Zigbee coordinator in Phase 2 |
 
 ## Strategy by transport
@@ -22,6 +24,13 @@ Move to a dedicated Zigbee coordinator (SONOFF ZBDongle-P) via ZHA/Zigbee2MQTT
 (Phase 2). Once paired locally, **region and cloud are irrelevant** — no
 Aqara/Xiaomi cloud, no region lock, lowest latency. This fully closes the "CN
 device" problem for the switches.
+
+### BLE Mesh (6 kitchen Yeelight M2 downlights) — via the wall switch
+Yeelight Mesh (Bluetooth Mesh) has no LAN Control and only works through a mesh
+gateway + Mi Home cloud — not practically localizable in HA. All 6 kitchen spots
+are on **one Aqara E1 wall switch**, so HA gets on/off via that switch once it's
+on the Zigbee coordinator (Phase 2). Brightness/color stay set-and-forget in the
+Yeelight/Mi Home app. HA does not manage the spots individually — by design.
 
 ### Wi-Fi (vacuum, Yeelights) — local by token
 - All Wi-Fi device tokens are backed up (see below) → HA controls them locally by
