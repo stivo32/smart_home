@@ -2,476 +2,187 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up Home Assistant in Docker on a Raspberry Pi 3 to control Xiaomi Wi-Fi devices locally (low latency), preserve robot-vacuum room cleaning, and expose everything through the official Android Companion app.
+**Goal:** Unify all smart devices under one Home Assistant instance on the Raspberry Pi, controlled locally (low latency) through the official Android Companion app.
 
-**Architecture:** A single `homeassistant/home-assistant` Docker container runs on the Pi 3 with host networking and a persistent `/config` volume. HACS provides plugin management; the Xiaomi Miot Auto integration fetches device tokens from the Xiaomi cloud once, then controls Wi-Fi devices over the LAN. The vacuum uses `xiaomi_miio` segment cleaning plus a map card. Config lives in this git repo and is deployed to the Pi over SSH.
+**Architecture:** A single `homeassistant/home-assistant` Docker container runs on the Pi with host networking and a persistent `/config` volume. HACS provides plugin management; Xiaomi Miot Auto controls Mi Home Wi-Fi devices over the LAN. Zigbee devices (Aqara switches, ceiling lights) move onto a dedicated USB Zigbee coordinator via ZHA/Zigbee2MQTT (Phase 2), retiring the vendor hubs/clouds. Config lives in this git repo, deployed to the Pi over SSH.
 
-**Tech Stack:** Docker + docker compose, Home Assistant (Container/stable), HACS, Xiaomi Miot Auto integration, Xiaomi Cloud Map Extractor card, HA Android Companion app.
+**Tech Stack:** Docker + docker compose, Home Assistant (Container/stable), HACS, Xiaomi Miot Auto, Xiaomi vacuum map card, HA Android Companion app, SONOFF ZBDongle-P (TI CC2652P) + ZHA/Zigbee2MQTT (Phase 2).
 
-## Global Constraints
+## Actual Environment (discovered on deploy — supersedes earlier assumptions)
 
-- Target device: Raspberry Pi 3 (ARM, ~1GB RAM) — memory-conscious config, no heavy add-ons.
-- HA runs as a **Docker container** (not HA OS), alongside existing Pi jobs.
-- Container image: `ghcr.io/home-assistant/home-assistant:stable`.
-- Host networking is required (Xiaomi/mDNS device discovery does not work in bridge mode).
-- Secrets (Xiaomi account, tokens) must never be committed — kept in `homeassistant/secrets.yaml`, git-ignored.
-- Aqara Zigbee hub stays untouched; Zigbee is lowest priority.
-- Latency target for local Wi-Fi control: < ~300 ms (baseline is 1–2 s via China cloud).
+- Hardware is a **Raspberry Pi 4 (4GB, aarch64, Debian 12 bookworm)** — NOT a Pi 3. Resources are comfortable.
+- SSH alias `pi` → `admin@192.168.1.41`, key `~/.ssh/id_ed25519_pi`, passwordless sudo.
+- TZ **Europe/Vilnius**. Pi runs other jobs on the same SD card.
+- Deploy dir on Pi: **`/home/admin/smart_home`**. Image pulled from **docker.io** (ghcr.io stalled).
+- `mem_limit` is a no-op — kernel has `cgroup_disable=memory` in cmdline; not worth a reboot to change on 4GB.
+- SD card had corruption (from a prior power loss) — cleared; a true offline root fsck is not achievable via reboot on RPi OS (no initramfs). Card usable but under mild suspicion → Phase 2 hardening candidate.
+
+## Device Inventory (from Xiaomi Miot cn account, 33 entities)
+
+- **Vacuum:** `vacuum.roborock_m1s_f706` (Roborock M1S) + status/battery/mode/segment buttons.
+- **Lights:** Yeelight `yeelink_ceila`, `yeelink_ceilb` (ceiling), `yeelink_bslamp2` (lamp).
+- **Sensor:** `miaomiaoce_t2` temp/humidity.
+- **Switch:** `switch.lumi_b1lc04_2231` (one Lumi/Aqara switch that is linked to Mi Home).
+- **Xiaomi Multimode Gateway** `lumi_mgl03_3110` (the "Xiaomi Smart Home Hub") — present, few children.
+- **Not yet in HA:** Aqara **M2 hub** + its ceiling Zigbee lights; **Aqara Wall Switch E1 (QBKG38LM**, single-button, no-neutral, Zigbee, CN) units — currently only reachable via Apple Home. These are Phase 2.
 
 ## Deployment Model
 
-All config files are authored in this repo on the dev machine, then synced to the Pi at `~/smart_home/` and applied there. Set these shell vars on the dev machine before running deploy commands:
+Config authored in this repo, synced to the Pi and applied there:
 
 ```bash
-export PI_HOST=pi@raspberrypi.local   # adjust to your Pi's user@host or IP
-export PI_DIR=/home/pi/smart_home
-```
-
-Deploy helper (used throughout):
-
-```bash
-rsync -av --exclude='homeassistant/secrets.yaml' --exclude='homeassistant/.storage' \
-  --exclude='homeassistant/home-assistant_v2.db' \
+export PI_HOST=pi
+export PI_DIR=/home/admin/smart_home
+rsync -a --exclude='.git' --exclude='homeassistant/secrets.yaml' --exclude='homeassistant/.storage' \
+  --exclude='homeassistant/home-assistant_v2.db' --exclude='homeassistant/custom_components' \
   ./ "$PI_HOST:$PI_DIR/"
+ssh pi "cd $PI_DIR && docker compose up -d"
 ```
 
-## File Structure
+## Global Constraints
 
-- `docker-compose.yml` — HA container definition (host network, restart policy, volume).
-- `homeassistant/configuration.yaml` — base HA config tuned for Pi 3.
-- `homeassistant/secrets.yaml.example` — template for secrets (real one git-ignored).
-- `.gitignore` — excludes secrets, HA runtime state, DB.
-- `README.md` — deploy + operations runbook.
-- `docs/runbook-xiaomi-tokens.md` — how to obtain Xiaomi tokens / set region.
+- HA runs as a **Docker container** (not HA OS), alongside existing Pi jobs.
+- Host networking is required (Xiaomi/mDNS discovery does not work in bridge mode).
+- Secrets never committed — `homeassistant/secrets.yaml` is git-ignored.
+- Latency target for local control: < ~300 ms (baseline 1–2 s via China cloud).
 
 ---
 
-### Task 1: Repo scaffolding + HA container running on the Pi
+# PHASE 1 — Current devices + mobile app
 
-**Files:**
-- Create: `docker-compose.yml`
-- Create: `.gitignore`
-- Create: `README.md`
+Goal: confirm everything already in HA (Xiaomi Mi Home devices) works locally, preserve vacuum room cleaning, and get the Android app as the single UI. No new hardware.
 
-**Interfaces:**
-- Consumes: nothing (first task).
-- Produces: a running HA instance reachable at `http://<pi-ip>:8123`; the `$PI_DIR` deploy layout; the `homeassistant/` config directory mounted into the container at `/config`.
+## Done so far (✅)
 
-- [ ] **Step 1: Write `.gitignore`**
+- ✅ Scaffold: `docker-compose.yml` (docker.io image, host net, Vilnius TZ), `.gitignore`, `README.md`, Mac dry-run override.
+- ✅ Pi 4 prepared: old crashlooping HA + corrupted image removed, SD errors cleared.
+- ✅ HA deployed fresh on Pi, onboarding done (owner account created).
+- ✅ HACS installed and configured.
+- ✅ Xiaomi Miot Auto installed; **cn account added** → 33 entities imported.
 
-```gitignore
-homeassistant/secrets.yaml
-homeassistant/.storage/
-homeassistant/home-assistant_v2.db
-homeassistant/*.log
-homeassistant/.cloud/
-homeassistant/tts/
-homeassistant/deps/
-```
+### Task 1.1: Verify Xiaomi devices reachable + measure local latency
 
-- [ ] **Step 2: Write `docker-compose.yml`**
+**Files:** none (validation only).
 
-```yaml
-services:
-  homeassistant:
-    container_name: homeassistant
-    image: ghcr.io/home-assistant/home-assistant:stable
-    restart: unless-stopped
-    network_mode: host
-    privileged: false
-    volumes:
-      - ./homeassistant:/config
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - TZ=Europe/Warsaw
-    # Pi 3 is memory-limited; cap so HA can't starve existing jobs.
-    mem_limit: 768m
-```
+- [ ] **Step 1: Confirm entities are `available` (not `unavailable`)**
 
-- [ ] **Step 3: Write `README.md` deploy section**
+In HA: Developer Tools → States. Filter for `light.yeelink`, `vacuum.roborock`, `switch.lumi`. Confirm state is on/off/docked, not `unavailable`.
 
-````markdown
-# Smart Home Hub
+- [ ] **Step 2: Toggle a light from the dashboard**
 
-Home Assistant in Docker on a Raspberry Pi 3, for local control of Xiaomi Wi-Fi devices.
+Toggle `light.yeelink_ceilb_5b2c_light` in the UI. Confirm the physical light responds.
 
-## Deploy
+- [ ] **Step 3: Measure command latency (local vs old cloud baseline)**
 
-On the dev machine:
-
+Create a long-lived token (HA profile → Security → Long-lived tokens), store as `$HA_TOKEN`, then from the dev machine:
 ```bash
-export PI_HOST=pi@raspberrypi.local
-export PI_DIR=/home/pi/smart_home
-rsync -av --exclude='homeassistant/secrets.yaml' --exclude='homeassistant/.storage' \
-  --exclude='homeassistant/home-assistant_v2.db' ./ "$PI_HOST:$PI_DIR/"
+time curl -s -X POST -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
+  -d '{"entity_id":"light.yeelink_ceilb_5b2c_light"}' \
+  http://192.168.1.41:8123/api/services/light/toggle
 ```
+Expected: light reacts, `real` well under 1 s (target < ~300 ms) vs the 1–2 s cloud baseline. If latency is high, check whether Miot is controlling this device locally or via cloud (integration options → enable local/LAN mode).
 
-On the Pi:
+### Task 1.2: Vacuum room / segment cleaning
 
-```bash
-cd ~/smart_home
-docker compose up -d
-docker compose logs -f homeassistant
-```
+**Files:** Create `docs/runbook-xiaomi-tokens.md` (token/region + vacuum notes).
 
-Open `http://<pi-ip>:8123`.
-````
+- [ ] **Step 1: Confirm vacuum entity + get room mapping**
 
-- [ ] **Step 4: Deploy to the Pi and start the container**
+Developer Tools → Actions → `vacuum.send_command`, target `vacuum.roborock_m1s_f706`, command `get_room_mapping`. Read the segment ID → room name mapping from the response/state.
 
-Run (dev machine):
-```bash
-rsync -av --exclude='homeassistant/secrets.yaml' ./ "$PI_HOST:$PI_DIR/"
-ssh "$PI_HOST" "cd $PI_DIR && docker compose up -d"
-```
-Expected: `docker compose up -d` reports `Container homeassistant Started`.
+- [ ] **Step 2: Install a vacuum map card via HACS**
 
-- [ ] **Step 5: Validate HA is reachable**
+HACS → Frontend → search "Xiaomi Vacuum Map" (`PiotrMachowski/lovelace-xiaomi-vacuum-map-card`) → Download → restart HA (via SSH: `ssh pi 'cd /home/admin/smart_home && docker compose restart homeassistant'`).
 
-Run (dev machine):
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://<pi-ip>:8123/
-```
-Expected: `200` (HA onboarding page). If `000`, check `ssh "$PI_HOST" "docker compose -f $PI_DIR/docker-compose.yml logs --tail=50 homeassistant"`.
+- [ ] **Step 3: Add the map card + validate a single-room clean**
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add .gitignore docker-compose.yml README.md
-git commit -m "feat: HA docker-compose scaffold + deploy runbook"
-```
-
----
-
-### Task 2: Base HA config tuned for Pi 3 + onboarding
-
-**Files:**
-- Create: `homeassistant/configuration.yaml`
-- Create: `homeassistant/secrets.yaml.example`
-
-**Interfaces:**
-- Consumes: running container from Task 1 (mounts `homeassistant/` → `/config`).
-- Produces: a `configuration.yaml` with recorder tuned for low disk/memory; a `secrets.yaml` convention (`!secret` keys) for later tasks.
-
-- [ ] **Step 1: Write `homeassistant/secrets.yaml.example`**
-
-```yaml
-# Copy to secrets.yaml (git-ignored) and fill in real values.
-# Xiaomi cloud account used to fetch device tokens (Task 4).
-xiaomi_username: "your-xiaomi-account@example.com"
-xiaomi_password: "your-password"
-xiaomi_country: "cn"   # region devices are provisioned in; "cn" = Mainland China
-```
-
-- [ ] **Step 2: Write `homeassistant/configuration.yaml`**
-
-```yaml
-# Loads HA defaults (frontend, history, etc.)
-default_config:
-
-# Pi 3 is I/O and memory constrained — keep the recorder small.
-recorder:
-  purge_keep_days: 7
-  commit_interval: 30
-  exclude:
-    domains:
-      - updater
-      - sun
-
-# Trust the LAN and reverse proxies on the Pi itself.
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 127.0.0.1
-    - ::1
-
-logger:
-  default: warning
-```
-
-- [ ] **Step 3: Deploy and restart HA**
-
-Run:
-```bash
-rsync -av --exclude='homeassistant/secrets.yaml' ./ "$PI_HOST:$PI_DIR/"
-ssh "$PI_HOST" "cd $PI_DIR && docker compose restart homeassistant"
-```
-Expected: container restarts without error.
-
-- [ ] **Step 4: Validate config is accepted**
-
-Run:
-```bash
-ssh "$PI_HOST" "docker exec homeassistant python -m homeassistant --script check_config -c /config"
-```
-Expected: `Testing configuration at /config` then no `ERROR` lines; ends with the config summary.
-
-- [ ] **Step 5: Complete onboarding in the browser**
-
-Open `http://<pi-ip>:8123`, create the owner account, set home location/timezone. This account is what the Android app logs into.
-Validation: you reach the empty HA dashboard (Overview).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add homeassistant/configuration.yaml homeassistant/secrets.yaml.example
-git commit -m "feat: Pi 3-tuned HA base config + secrets template"
-```
-
----
-
-### Task 3: Install HACS (plugin manager)
-
-**Files:**
-- Modify: none in repo (HACS installs into `homeassistant/custom_components/` which is runtime state on the Pi).
-- Modify: `.gitignore` (ignore HACS-managed runtime files).
-
-**Interfaces:**
-- Consumes: onboarded HA from Task 2.
-- Produces: a working HACS panel used by Tasks 4 and 5 to install `Xiaomi Miot Auto` and the map card.
-
-- [ ] **Step 1: Add HACS runtime paths to `.gitignore`**
-
-```gitignore
-homeassistant/custom_components/
-homeassistant/www/community/
-```
-
-- [ ] **Step 2: Install HACS onto the Pi**
-
-Run (installs into the mounted config dir via the official script inside the container):
-```bash
-ssh "$PI_HOST" "docker exec homeassistant bash -c 'wget -O - https://get.hacs.xyz | bash -'"
-ssh "$PI_HOST" "cd $PI_DIR && docker compose restart homeassistant"
-```
-Expected: script prints `INFO: Installation complete.` then container restarts.
-
-- [ ] **Step 3: Validate HACS files exist**
-
-Run:
-```bash
-ssh "$PI_HOST" "ls $PI_DIR/homeassistant/custom_components/hacs/manifest.json"
-```
-Expected: the path prints (file exists).
-
-- [ ] **Step 4: Add the HACS integration in the UI**
-
-In HA: Settings → Devices & Services → Add Integration → search "HACS" → follow the GitHub device-code auth. (Requires a free GitHub account.)
-Validation: a "HACS" entry appears in the left sidebar.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add .gitignore
-git commit -m "chore: ignore HACS runtime paths"
-```
-
----
-
-### Task 4: Xiaomi Wi-Fi devices — local control via Xiaomi Miot Auto
-
-**Files:**
-- Create: `docs/runbook-xiaomi-tokens.md`
-
-**Interfaces:**
-- Consumes: HACS from Task 3; `secrets.yaml` region from Task 2.
-- Produces: HA entities for Wi-Fi lights/switches controllable over the LAN; the documented token/region workflow reused by Task 5's vacuum.
-
-- [ ] **Step 1: Write `docs/runbook-xiaomi-tokens.md`**
-
-````markdown
-# Xiaomi Tokens & Region
-
-Xiaomi Miot Auto signs into your Xiaomi cloud account **once** to fetch each
-device's local token, then controls devices over the LAN.
-
-## Region matters
-Devices provisioned in the Mi Home app under **Mainland China** must be read
-with country `cn`. Using the wrong region returns an empty device list.
-Set `xiaomi_country` in `secrets.yaml` to match the app region.
-
-## If a device stays cloud-only
-Some models only accept cloud control. Miot Auto can fall back to cloud per
-device — acceptable, but those keep the higher latency. Prefer models that
-report a local token.
-
-## 2FA
-If the account has 2FA, approve the login prompt in the Mi Home app / email
-during integration setup.
-````
-
-- [ ] **Step 2: Install "Xiaomi Miot Auto" via HACS**
-
-In HA: HACS → Integrations → search "Xiaomi Miot Auto" (`al-one/hass-xiaomi-miot`) → Download → restart HA when prompted.
-Validation: after restart, Settings → Devices & Services → Add Integration lists "Xiaomi Miot Auto".
-
-- [ ] **Step 3: Add the integration with cloud account**
-
-Add Integration → "Xiaomi Miot Auto" → choose "Add devices using Xiaomi Account" → enter the account and the **region matching Mainland China (cn)**.
-Validation: your Wi-Fi devices (lights, switches, luster) appear as devices with entities.
-
-- [ ] **Step 4: Validate local control + measure latency**
-
-Toggle one Wi-Fi light from the HA dashboard. Then time an API call from the dev machine (get a long-lived token via HA profile first, store as `$HA_TOKEN`):
-```bash
-time curl -s -X POST -H "Authorization: Bearer $HA_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"entity_id":"light.<your_light>"}' \
-  http://<pi-ip>:8123/api/services/light/toggle
-```
-Expected: light reacts and `real` time is well under 1 s (target < ~300 ms) — versus the 1–2 s cloud baseline.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add docs/runbook-xiaomi-tokens.md
-git commit -m "docs: Xiaomi token/region runbook"
-```
-
----
-
-### Task 5: Robot vacuum — room / segment cleaning
-
-**Files:**
-- Modify: `docs/runbook-xiaomi-tokens.md` (append vacuum section)
-
-**Interfaces:**
-- Consumes: Xiaomi Miot Auto + token workflow from Task 4; HACS from Task 3.
-- Produces: a `vacuum.*` entity that accepts segment (room) cleaning commands, plus a map card that shows rooms in the dashboard.
-
-- [ ] **Step 1: Confirm the vacuum entity exists**
-
-The vacuum should already appear from Task 4's Miot Auto setup. In HA: Settings → Devices & Services → Xiaomi Miot Auto → find the vacuum device.
-Validation: a `vacuum.<name>` entity exists and shows state (docked/idle).
-
-- [ ] **Step 2: Find the room/segment IDs**
-
-In HA: Developer Tools → Actions (Services) → `vacuum.send_command` → target the vacuum, then call with:
-```yaml
-command: get_room_mapping
-```
-Then read the result in Developer Tools → States or the response.
-Validation: you get a mapping of segment IDs → room names (e.g. `16: Kitchen`).
-
-- [ ] **Step 3: Install "Xiaomi Cloud Map Extractor" card via HACS**
-
-In HA: HACS → Frontend → search "Xiaomi Cloud Map Extractor" (`PiotrMachowski/lovelace-xiaomi-vacuum-map-card` for interactive rooms, or the cloud map extractor for image) → Download.
-Validation: the card type is available when editing a dashboard.
-
-- [ ] **Step 4: Add the vacuum map card to a dashboard**
-
-Edit the Overview dashboard → Add Card → "Xiaomi Vacuum Map" → set entity to your `vacuum.*` and configure the room presets using the IDs from Step 2. Example card config:
-```yaml
-type: custom:xiaomi-vacuum-map-card
-entity: vacuum.your_vacuum
-map_source:
-  camera: camera.your_vacuum_map   # if using the map extractor camera
-map_modes:
-  - name: Rooms
-    selection_type: ROOM
-    rooms:
-      - id: 16
-        name: Kitchen
-      - id: 17
-        name: Bedroom
-```
-
-- [ ] **Step 5: Validate a single-room clean**
-
-From the map card, select one room and start cleaning (or via Developer Tools):
+Add the card to the dashboard, configure rooms with the IDs from Step 1. Then trigger one room and confirm the vacuum cleans only that room:
 ```yaml
 # vacuum.send_command
 command: app_segment_clean
-params: [16]
+params: [<segment_id>]
 ```
-Expected: the vacuum leaves the dock and cleans only the selected room, then returns.
+Expected: vacuum cleans only the selected room, returns to dock.
 
-- [ ] **Step 6: Append vacuum notes to the runbook and commit**
+- [ ] **Step 4: Write runbook + commit**
 
-Append to `docs/runbook-xiaomi-tokens.md`:
-````markdown
-## Vacuum rooms
-Get segment IDs with `vacuum.send_command` → `get_room_mapping`.
-Clean one room with `app_segment_clean` and `params: [<id>]`.
-Room→ID mapping can change if you re-map the floor plan in the vacuum app.
-````
+Document region/token workflow and the `get_room_mapping` / `app_segment_clean` commands in `docs/runbook-xiaomi-tokens.md`.
 ```bash
-git add docs/runbook-xiaomi-tokens.md
-git commit -m "docs: vacuum room-cleaning runbook"
+git add docs/runbook-xiaomi-tokens.md && git commit -m "docs: Xiaomi token/region + vacuum room runbook"
 ```
+
+### Task 1.3: Android Companion app as the single UI
+
+**Files:** Modify `README.md` (operations section).
+
+- [ ] **Step 1: Install + connect the app**
+
+Install "Home Assistant" from the Play Store. It auto-discovers the Pi on the LAN (or enter `http://192.168.1.41:8123`). Log in with the owner account.
+Validation: dashboard loads on the phone; toggling a light works from the phone.
+
+- [ ] **Step 2: Confirm remote-friendly basics**
+
+Confirm the app stays logged in and controls devices over Wi-Fi. (External/remote access — Nabu Casa or VPN — is out of scope for Phase 1; LAN only.)
+
+- [ ] **Step 3: Enable HA backups + commit ops notes**
+
+HA: Settings → System → Backups → create a full backup. Append an operations section to `README.md`.
+```bash
+git add README.md && git commit -m "docs: operations + Android app notes"
+```
+
+### Task 1.4: (optional) Bluetooth capabilities
+
+The container logs `Missing NET_ADMIN/NET_RAW capabilities for Bluetooth`. Only do this if BLE devices (e.g. Xiaomi thermometers) need direct HA Bluetooth.
+
+- [ ] Add to `docker-compose.yml` under the service: `cap_add: [NET_ADMIN, NET_RAW]` and volume `- /run/dbus:/run/dbus:ro`, redeploy, restart. Otherwise leave Bluetooth disabled.
 
 ---
 
-### Task 6: Android app, Aqara regression check, backups, final validation
+# PHASE 2 — Zigbee coordinator + Aqara/ceiling lights (when the stick arrives)
 
-**Files:**
-- Modify: `README.md` (append operations section)
+Goal: bring the Aqara E1 wall switches and ceiling Zigbee lights into HA **locally**, on a dedicated coordinator, retiring the Aqara/Xiaomi vendor hubs and Apple Home dependency for these devices.
 
-**Interfaces:**
-- Consumes: everything from Tasks 1–5.
-- Produces: the single Android UI onto the hub; a backup routine; a documented "it all works" checklist.
+**Hardware:** SONOFF **ZBDongle-P** (TI CC2652P + CP2102N). Plug via a **USB 2.0 extension cable** into a **USB 2.0 (black) port** on the Pi 4 (USB3 ports cause 2.4GHz interference). Appears as `/dev/ttyUSB0` (cp210x driver built into Linux).
 
-- [ ] **Step 1: Connect the Android Companion app**
+### Task 2.1: Wire the coordinator into the container
 
-Install "Home Assistant" from the Play Store → it auto-discovers the Pi on the LAN (or enter `http://<pi-ip>:8123`) → log in with the owner account from Task 2.
-Validation: the dashboard (with lights + vacuum map) loads on the phone; toggling a light works.
+**Files:** Modify `docker-compose.yml`.
 
-- [ ] **Step 2: Aqara hub regression check**
+- [ ] Confirm the device node on the Pi: `ssh pi 'ls -l /dev/ttyUSB* && dmesg | grep -i cp210'`.
+- [ ] Add to the `homeassistant` service in `docker-compose.yml`:
+  ```yaml
+  devices:
+    - /dev/ttyUSB0:/dev/ttyUSB0
+  ```
+- [ ] Redeploy (rsync) + `docker compose up -d`. Commit.
 
-If the Aqara hub is desired in HA now, add it: Settings → Devices & Services → Add Integration → "Xiaomi Miot" / "Aqara". Otherwise confirm the native Aqara app still controls Zigbee devices unchanged.
-Validation: Aqara-connected lights still switch (via native app at minimum). No regression.
+### Task 2.2: Choose + set up the Zigbee stack
 
-- [ ] **Step 3: Enable HA backups**
+Decision: **ZHA** (built into HA, no broker, simplest) vs **Zigbee2MQTT** (broader Aqara support, needs an MQTT broker container). Lean **Zigbee2MQTT** for the Aqara E1 quirks — revisit at execution.
 
-In HA: Settings → System → Backups → Create backup (full). Optionally schedule via an automation. Also copy config off the Pi:
-```bash
-ssh "$PI_HOST" "cd $PI_DIR && tar czf ha-config-backup.tgz --exclude=homeassistant/home-assistant_v2.db homeassistant"
-scp "$PI_HOST:$PI_DIR/ha-config-backup.tgz" ./backups/
-```
-Validation: `backups/ha-config-backup.tgz` exists on the dev machine.
+- [ ] If Z2M: add `eclipse-mosquitto` + `zigbee2mqtt` containers (or HA MQTT add-on equivalent), point Z2M at `/dev/ttyUSB0`, add the MQTT integration in HA.
+- [ ] If ZHA: Settings → Devices & Services → Add Integration → ZHA → select `/dev/ttyUSB0` → CC2652P/znp radio.
+- [ ] Validation: the Zigbee network forms; coordinator online.
 
-- [ ] **Step 4: Reboot-survival test**
+### Task 2.3: Pair devices + retire vendor hubs
 
-Run:
-```bash
-ssh "$PI_HOST" "sudo reboot"
-# wait ~60s
-curl -s -o /dev/null -w "%{http_code}\n" http://<pi-ip>:8123/
-```
-Expected: `200` — HA came back automatically (via `restart: unless-stopped`).
+- [ ] Factory-reset each **Aqara E1 switch** and pair to the new coordinator (permit-join). Note: no-neutral single-live-wire switches may need a light load/bypass to power on.
+- [ ] Factory-reset + pair the **ceiling Zigbee lights** currently on the Aqara M2.
+- [ ] Confirm each appears as an HA entity and toggles locally.
+- [ ] Once all Zigbee devices are on the new coordinator, remove the Aqara hub from Apple Home and retire the Aqara M2 / Xiaomi gateway for Zigbee (or repurpose).
+- [ ] Reconcile the **EU-region** device: if it never reappears in Mi Home, pair it to the Zigbee coordinator too.
 
-- [ ] **Step 5: Append operations section to `README.md` and commit**
+### Task 2.4: (optional) SD hardening
 
-Append to `README.md`:
-````markdown
-## Operations
-
-- Android app: HA Companion, points to `http://<pi-ip>:8123`, one-time login.
-- Backups: Settings → System → Backups; config tarball synced to `./backups/`.
-- Reboot: HA auto-starts (`restart: unless-stopped`).
-- Latency check: `time curl` the `light/toggle` service (see Task 4).
-- Aqara Zigbee stays on its native hub; lowest priority.
-````
-```bash
-mkdir -p backups && echo "*.tgz" > backups/.gitignore
-git add README.md backups/.gitignore
-git commit -m "docs: operations runbook + backup ignore"
-```
+- [ ] Consider migrating HA/boot to a USB SSD, or enable initramfs to allow real offline root fsck, given the SD's prior corruption. Keep recorder purge low (already 7 days) to limit SD wear.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:**
-- One app → Task 6 (Android Companion). ✓
-- One-time key setup → Task 4 (cloud account fetches tokens once). ✓
-- Plugin support → Task 3 (HACS). ✓
-- Vacuum room cleaning → Task 5. ✓
-- Low latency / local control → Task 4 Step 4 (latency validation). ✓
-- Aqara untouched → Task 6 Step 2. ✓
-- Docker on Pi 3, resource-conscious → Task 1 (`mem_limit`), Task 2 (recorder tuning). ✓
-- Secrets not committed → Task 1 `.gitignore`, Task 2 `secrets.yaml.example`. ✓
+**Phase 1 coverage:** current Xiaomi devices verified (1.1), vacuum rooms (1.2), Android app (1.3), Bluetooth optional (1.4). **Phase 2 coverage:** coordinator wiring (2.1), stack choice (2.2), pairing + hub retirement + EU device (2.3), SD hardening (2.4).
 
-**Placeholder scan:** No TBD/TODO; `<pi-ip>`, `<your_light>`, `<name>`, `<id>` are user-supplied runtime values with documented sources, not plan gaps.
+**Placeholder scan:** `<segment_id>`, `<...>` are user-supplied runtime values with documented sources, not gaps.
 
-**Type consistency:** `secrets.yaml` keys (`xiaomi_username/password/country`) defined in Task 2, reused in Task 4. `vacuum.send_command` with `get_room_mapping` / `app_segment_clean` consistent across Task 5. Deploy vars `$PI_HOST`/`$PI_DIR` consistent throughout.
+**Consistency:** deploy vars (`PI_HOST=pi`, `PI_DIR=/home/admin/smart_home`), image (docker.io), device node (`/dev/ttyUSB0`), and entity IDs match the discovered inventory throughout.
