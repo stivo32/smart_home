@@ -19,6 +19,13 @@ http:
 
 logger:
   default: warning
+  logs:
+    # Debug for native Yeelight to capture the occasional ceiling-light
+    # reconnect/flicker (power glitches from the no-neutral wall switch).
+    homeassistant.components.yeelight: debug
+    # Silence the dead Xiaomi-cloud "Unable to discover" spam for the
+    # ceiling lights, which now run on the native Yeelight integration.
+    custom_components.xiaomi_miot.core.device.yeelink: critical
 
 # Curated dashboard in YAML (version-controlled). The default Overview stays
 # UI-managed; this adds a "Home" dashboard in the sidebar.
