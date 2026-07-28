@@ -54,14 +54,14 @@ views:
         entities:
           - entity: light.yeelink_bslamp2_5e7b_light
             name: Лампа
-          - entity: light.yeelink_ceila_9b89_light
-            name: Потолок (гостиная)
-            secondary_info: last-changed
-          - entity: light.yeelink_ceilb_5b2c_light
-            name: Потолок (Arwen)
-            secondary_info: last-changed
-          - entity: light.yeelink_ceilb_5b2c_ambient_light
-            name: Потолок (подсветка)
+          - entity: light.yeelight_ceila_0x1a61970c
+            name: Потолок Pro 1
+          - entity: light.yeelight_ceila_0x17a26c8e
+            name: Потолок Pro 2
+          - entity: light.yeelight_ceilb_0x182d2b96
+            name: Потолок Arwen
+          - entity: light.yeelight_ceilb_0x182d2b96_ambilight
+            name: Arwen подсветка
 
       - type: entities
         title: Выключатели
