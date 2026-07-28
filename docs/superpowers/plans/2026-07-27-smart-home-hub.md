@@ -167,10 +167,15 @@ Decision: **ZHA** (built into HA, no broker, simplest) vs **Zigbee2MQTT** (broad
 
 ### Task 2.3: Pair devices + retire vendor hubs
 
-- [ ] Factory-reset each **Aqara E1 switch** and pair to the new coordinator (permit-join). Note: no-neutral single-live-wire switches may need a light load/bypass to power on.
-- [ ] Factory-reset + pair the **ceiling Zigbee lights** currently on the Aqara M2.
-- [ ] Confirm each appears as an HA entity and toggles locally.
-- [ ] Once all Zigbee devices are on the new coordinator, remove the Aqara hub from Apple Home and retire the Aqara M2 / Xiaomi gateway for Zigbee (or repurpose).
+**User preference (important):** the user controls the **Yeelight ceiling lights** via the physical **wall switches** (on/off) and only sets color in the app occasionally. This is fine by them. Consequences:
+- The ceiling bulbs are **smart bulbs on a power-cutting switch** — when the switch is off, the bulb is unpowered and shows `unavailable` in HA. This is **expected, not a bug**; do not "fix" it.
+- **Do NOT** set the Aqara E1 to decoupled mode — the user wants the switch to actually cut the light.
+- The point of bringing the E1 switches into HA is optional app/automation control of on/off (physical switch keeps working). Confirm at execution whether the user even wants app on/off, or physical-only is enough.
+
+- [ ] Factory-reset each **Aqara E1 switch** (QBKG38LM) and pair to the new coordinator (permit-join). Note: no-neutral single-live-wire switches may need a minimum load/bypass.
+- [ ] Confirm each switch appears as an HA entity and toggles the light's power.
+- [ ] Ceiling **Yeelight bulbs** already come via Xiaomi Miot — leave them; they are controllable only while their wall switch is on (accepted).
+- [ ] Once Zigbee devices are on the new coordinator, remove the Aqara hub from Apple Home and retire the Aqara M2 / Xiaomi gateway for Zigbee (or repurpose).
 - [ ] Reconcile the **EU-region** device: if it never reappears in Mi Home, pair it to the Zigbee coordinator too.
 
 ### Task 2.4: (optional) SD hardening
