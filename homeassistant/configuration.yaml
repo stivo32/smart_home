@@ -17,6 +17,25 @@ http:
     - 127.0.0.1
     - ::1
 
+# Vacuum map pulled from Xiaomi cloud (gen1 1S map is cloud-hosted). Used once
+# to capture zone coordinates for local app_zoned_clean buttons. Secrets live in
+# secrets.yaml on the Pi (git-ignored).
+camera:
+  - platform: xiaomi_cloud_map_extractor
+    name: Vacuum Map
+    host: !secret vacuum_host
+    token: !secret vacuum_token
+    username: !secret xiaomi_username
+    password: !secret xiaomi_password
+    country: !secret xiaomi_country
+    auto_update: true
+    scan_interval: 8
+    draw: ["all"]
+    attributes:
+      - calibration_points
+      - rooms
+      - charger
+
 logger:
   default: warning
   logs:
