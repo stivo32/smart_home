@@ -65,9 +65,20 @@ views:
 
       - type: entities
         title: Выключатели
+        show_header_toggle: true
         entities:
-          - entity: switch.lumi_b1lc04_2231_switch
-            name: Выключатель
+          - entity: light.kukhnia_switch_kukhnia
+            name: Кухня
+            icon: mdi:wall-switch
+          - entity: light.switch_gostinnaia
+            name: Гостиная
+            icon: mdi:wall-switch
+          - entity: light.switch_spalnia
+            name: Спальня
+            icon: mdi:wall-switch
+          - entity: light.lumi_lumi_switch_b1lc04
+            name: Детская
+            icon: mdi:wall-switch
 
       - type: entities
         title: Климат
