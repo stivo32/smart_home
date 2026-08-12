@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     network_mode: host
     privileged: false
+    devices:
+      - /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_4c879acf009eef11867ad9a661ce3355-if00-port0:/dev/ttyUSB0
     volumes:
       - ./homeassistant:/config
       - /etc/localtime:/etc/localtime:ro
