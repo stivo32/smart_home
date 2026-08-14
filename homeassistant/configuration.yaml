@@ -45,6 +45,9 @@ logger:
     # Silence the dead Xiaomi-cloud "Unable to discover" spam for the
     # ceiling lights, which now run on the native Yeelight integration.
     custom_components.xiaomi_miot.core.device.yeelink: critical
+    custom_components.yandex_station: debug
+    homeassistant.components.zha: debug
+    zigpy: debug
 
 # Curated dashboard in YAML (version-controlled). The default Overview stays
 # UI-managed; this adds a "Home" dashboard in the sidebar.
@@ -56,3 +59,46 @@ lovelace:
       icon: mdi:home-assistant
       show_in_sidebar: true
       filename: dashboards/home.yaml
+
+# Helpers for UI interactions
+input_text:
+  alice_say_message:
+    name: "Текст для Алисы"
+    initial: ""
+    max: 255
+    icon: mdi:message-text
+
+# Scripts
+script:
+  alice_say:
+    alias: "Алиса: Произнести текст"
+    icon: mdi:account-voice
+    mode: single
+    sequence:
+      - condition: template
+        value_template: "{{ states('input_text.alice_say_message') | trim != '' }}"
+      - action: media_player.play_media
+        target:
+          entity_id: media_player.yandex_station_ff98f0295a9abe270b195357
+        data:
+          media_content_type: text
+          media_content_id: "{{ states('input_text.alice_say_message') }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.alice_say_message
+        data:
+          value: ""
+
+  alice_call_veronika:
+    alias: "Позвать Веронику"
+    icon: mdi:account-alert
+    mode: single
+    sequence:
+      - action: media_player.play_media
+        target:
+          entity_id: media_player.yandex_station_ff98f0295a9abe270b195357
+        data:
+          media_content_type: text
+          media_content_id: "Вероника, тебя зовут родители"
+
+

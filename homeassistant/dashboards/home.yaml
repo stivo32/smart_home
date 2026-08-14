@@ -49,19 +49,16 @@ views:
                 entity_id: vacuum.roborock_m1s_f706_robot_cleaner
 
       - type: entities
-        title: Свет
-        show_header_toggle: true
+        title: Алиса (Яндекс Станция)
         entities:
-          - entity: light.yeelink_bslamp2_5e7b_light
-            name: Лампа
-          - entity: light.yeelight_ceila_0x1a61970c
-            name: Потолок Pro 1
-          - entity: light.yeelight_ceila_0x17a26c8e
-            name: Потолок Pro 2
-          - entity: light.yeelight_ceilb_0x182d2b96
-            name: Потолок Arwen
-          - entity: light.yeelight_ceilb_0x182d2b96_ambilight
-            name: Arwen подсветка
+          - entity: input_text.alice_say_message
+            name: Сообщение
+          - entity: script.alice_say
+            name: Произнести
+          - entity: script.alice_call_veronika
+            name: Позвать Веронику
+          - entity: media_player.yandex_station_ff98f0295a9abe270b195357
+            name: Яндекс Мини
 
       - type: entities
         title: Выключатели
@@ -69,16 +66,14 @@ views:
         entities:
           - entity: light.kukhnia_switch_kukhnia
             name: Кухня
-            icon: mdi:wall-switch
           - entity: light.switch_gostinnaia
             name: Гостиная
-            icon: mdi:wall-switch
           - entity: light.switch_spalnia
             name: Спальня
-            icon: mdi:wall-switch
           - entity: light.lumi_lumi_switch_b1lc04
             name: Детская
-            icon: mdi:wall-switch
+          - entity: light.yeelink_bslamp2_5e7b_light
+            name: Лампа
 
       - type: entities
         title: Климат
@@ -103,3 +98,18 @@ views:
             name: Время уборки
           - entity: select.roborock_m1s_f706_mode
             name: Режим
+
+      - type: entities
+        title: Свет
+        show_header_toggle: true
+        entities:
+          - entity: light.yeelight_ceila_0x1a61970c
+            name: Потолок Pro 1
+          - entity: light.yeelight_ceila_0x17a26c8e
+            name: Потолок Pro 2
+          - entity: light.yeelight_ceilb_0x182d2b96
+            name: Потолок Arwen
+          - entity: light.yeelight_ceilb_0x182d2b96_ambilight
+            name: Arwen подсветка
+
+
