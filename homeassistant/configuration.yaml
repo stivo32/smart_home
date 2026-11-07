@@ -101,6 +101,53 @@ script:
           media_content_type: text
           media_content_id: "Вероника, тебя зовут родители"
 
+  # A script, not a scene: on Arwen, turning the main light off also kills
+  # the backlight, so the backlight must be turned on after, in this order.
+  bedroom_intimate:
+    alias: "Интимный свет"
+    icon: mdi:heart
+    mode: restart
+    sequence:
+      - action: light.turn_off
+        target:
+          entity_id: light.yeelight_ceilb_0x182d2b96
+      - delay: 1
+      - action: light.turn_on
+        target:
+          entity_id: light.yeelight_ceilb_0x182d2b96_ambilight
+        data:
+          brightness: 153
+          rgb_color: [255, 40, 80]
+
+# Scenes
+scene:
+  - id: bedroom_daylight
+    name: "Дневной свет"
+    icon: mdi:white-balance-sunny
+    entities:
+      light.yeelight_ceilb_0x182d2b96:
+        state: "on"
+        brightness: 255
+        color_temp_kelvin: 4000
+      light.yeelight_ceilb_0x182d2b96_ambilight:
+        state: "on"
+        brightness: 255
+        rgb_color: [255, 105, 180]
+
+  # Before sleep: warmest white, dimmed, amber backlight.
+  - id: bedroom_evening
+    name: "Вечерний свет"
+    icon: mdi:weather-night
+    entities:
+      light.yeelight_ceilb_0x182d2b96:
+        state: "on"
+        brightness: 128
+        color_temp_kelvin: 2700
+      light.yeelight_ceilb_0x182d2b96_ambilight:
+        state: "on"
+        brightness: 102
+        rgb_color: [255, 140, 50]
+
 # Automations
 automation:
   # Once a night: bedside lamp off, then all wall switches off. The ceilings
@@ -124,5 +171,48 @@ automation:
             - light.lumi_lumi_switch_b1lc04
             - light.switch_gostinnaia
             - light.kukhnia_switch_kukhnia
+
+  # Arwen follows the clock: evening 20:00–07:30, day otherwise. At the switch
+  # times it only restyles a lamp whose main light is on (so the intimate mode,
+  # main off, is left alone). When the wall switch powers the lamp up it comes
+  # back from `unavailable`, and gets the mode for the current time.
+  - id: bedroom_light_by_time
+    alias: "Спальня: дневной/вечерний свет по времени"
+    mode: restart
+    triggers:
+      - trigger: time
+        at: "20:00:00"
+        id: clock
+      - trigger: time
+        at: "07:30:00"
+        id: clock
+      - trigger: state
+        entity_id: light.yeelight_ceilb_0x182d2b96
+        from: "unavailable"
+        to:
+          - "on"
+          - "off"
+        id: power_on
+    conditions:
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: power_on
+          - condition: state
+            entity_id: light.yeelight_ceilb_0x182d2b96
+            state: "on"
+    actions:
+      - if:
+          - condition: time
+            after: "20:00:00"
+            before: "07:30:00"
+        then:
+          - action: scene.turn_on
+            target:
+              entity_id: scene.vechernii_svet
+        else:
+          - action: scene.turn_on
+            target:
+              entity_id: scene.dnevnoi_svet
 
 
