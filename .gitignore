@@ -3,6 +3,7 @@ homeassistant/.storage/
 homeassistant/home-assistant_v2.db
 homeassistant/*.log
 homeassistant/.cloud/
+homeassistant/.ssh/
 homeassistant/tts/
 homeassistant/deps/
 homeassistant/custom_components/

@@ -216,3 +216,8 @@ automation:
               entity_id: scene.dnevnoi_svet
 
 
+
+# Host power controls use a dedicated, restricted loopback SSH key.
+shell_command:
+  pi_reboot: "ssh -i /config/.ssh/pi_power -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/config/.ssh/pi_power_known_hosts ha-power@127.0.0.1 reboot"
+  pi_poweroff: "ssh -i /config/.ssh/pi_power -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/config/.ssh/pi_power_known_hosts ha-power@127.0.0.1 poweroff"
