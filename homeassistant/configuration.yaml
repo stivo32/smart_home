@@ -101,4 +101,28 @@ script:
           media_content_type: text
           media_content_id: "Вероника, тебя зовут родители"
 
+# Automations
+automation:
+  # Once a night: bedside lamp off, then all wall switches off. The ceilings
+  # are behind the switches, so cutting the switch powers them down too.
+  - id: night_all_lights_off
+    alias: "Ночь: выключить весь свет"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+    actions:
+      - action: light.turn_off
+        continue_on_error: true
+        target:
+          entity_id: light.yeelink_bslamp2_5e7b_light
+      - action: light.turn_off
+        continue_on_error: true
+        target:
+          entity_id:
+            - light.switch_spalnia
+            - light.lumi_lumi_switch_b1lc04
+            - light.switch_gostinnaia
+            - light.kukhnia_switch_kukhnia
+
 
